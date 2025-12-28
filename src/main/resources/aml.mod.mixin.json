@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "com.github.dirify21.aml.mixin.mixins.mod",
+  "plugin": "com.github.dirify21.aml.mixin.plugin.AMLMixinConfigPlugin",
+  "compatibilityLevel": "JAVA_8",
+  "target": "@env(MOD)",
+  "client": [],
+  "mixins": [],
+  "server": [],
+  "setSourceFile": true,
+  "minVersion": "0.8.7"
+}
