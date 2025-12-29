@@ -16,18 +16,23 @@ public class ArchaicModelLoader implements ICustomModelLoader {
 
     @Override
     public boolean accepts(ResourceLocation modelLocation) {
-        return modelLocation.getNamespace().equals("aml_virtual");
+        boolean matches = modelLocation.getNamespace().equals("aml_virtual");
+        if (matches) {
+            System.out.println("[AML-MODEL] Loader accepted: " + modelLocation);
+        }
+        return matches;
     }
 
     @Override
     public IModel loadModel(ResourceLocation modelLocation) {
-        String fullPath = modelLocation.getPath(); // Например: "minecraft:blocks/dirt"
+        String fullPath = modelLocation.getPath();
         ResourceLocation textureRes = new ResourceLocation(fullPath);
+
+        System.out.println("[AML-MODEL] Attempting to load model for path: " + fullPath);
 
         if (fullPath.contains("blocks/")) {
             return new ArchaicBlockModel(textureRes);
         }
-
         return new ArchaicItemModel(textureRes);
     }
 }
