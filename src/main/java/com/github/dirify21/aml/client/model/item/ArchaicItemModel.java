@@ -1,4 +1,4 @@
-package com.github.dirify21.aml.client.model;
+package com.github.dirify21.aml.client.model.item;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;

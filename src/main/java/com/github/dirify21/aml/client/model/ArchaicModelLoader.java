@@ -1,5 +1,7 @@
 package com.github.dirify21.aml.client.model;
 
+import com.github.dirify21.aml.client.model.block.ArchaicBlockModel;
+import com.github.dirify21.aml.client.model.item.ArchaicItemModel;
 import net.minecraft.client.resources.IResourceManager;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.client.model.ICustomModelLoader;
@@ -19,8 +21,13 @@ public class ArchaicModelLoader implements ICustomModelLoader {
 
     @Override
     public IModel loadModel(ResourceLocation modelLocation) {
-        String fullPath = modelLocation.getPath();
+        String fullPath = modelLocation.getPath(); // Например: "minecraft:blocks/dirt"
         ResourceLocation textureRes = new ResourceLocation(fullPath);
+
+        if (fullPath.contains("blocks/")) {
+            return new ArchaicBlockModel(textureRes);
+        }
+
         return new ArchaicItemModel(textureRes);
     }
 }

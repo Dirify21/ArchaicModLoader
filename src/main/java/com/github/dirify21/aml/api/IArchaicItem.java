@@ -1,4 +1,4 @@
-package com.github.dirify21.aml.util;
+package com.github.dirify21.aml.api;
 
 import net.minecraft.item.Item;
 

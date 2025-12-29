@@ -17,7 +17,5 @@ public class AMLMod {
      * </a>
      */
     @Mod.EventHandler
-    public void preInit(FMLPreInitializationEvent event) {
-    }
-
+    public void preInit(FMLPreInitializationEvent event) {}
 }
