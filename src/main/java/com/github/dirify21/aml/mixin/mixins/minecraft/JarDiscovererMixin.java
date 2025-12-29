@@ -1,6 +1,6 @@
 package com.github.dirify21.aml.mixin.mixins.minecraft;
 
-import com.github.dirify21.aml.asm.transformer.FMLTransformer;
+import com.github.dirify21.aml.asm.transformer.AMLTransformer;
 import net.minecraftforge.fml.common.discovery.JarDiscoverer;
 import net.minecraftforge.fml.common.discovery.asm.ASMModParser;
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,7 +20,7 @@ public abstract class JarDiscovererMixin {
     )
     private ASMModParser redirectASMModParser(InputStream is) throws IOException {
         byte[] originalBytes = readStream(is);
-        byte[] patchedBytes = FMLTransformer.patchArchaicClass(originalBytes);
+        byte[] patchedBytes = AMLTransformer.patchArchaicClass(originalBytes);
         return new ASMModParser(new ByteArrayInputStream(patchedBytes));
     }
 

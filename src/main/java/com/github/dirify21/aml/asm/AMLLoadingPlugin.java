@@ -13,7 +13,7 @@ public class AMLLoadingPlugin implements IFMLLoadingPlugin {
     @Override
     public @Nullable String[] getASMTransformerClass() {
         return new String[]{
-                "com.github.dirify21.aml.asm.transformer.FMLTransformer"
+                "com.github.dirify21.aml.asm.transformer.AMLTransformer"
         };
     }
 
