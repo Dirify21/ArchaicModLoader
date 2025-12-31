@@ -52,12 +52,10 @@ public class ModelRegistryHandler {
 
     @SubscribeEvent
     public static void onModelRegister(ModelRegistryEvent event) {
-        System.out.println("[AML-MODEL] ModelRegistryEvent fired");
         if (!loaderRegistered) {
             ModelLoaderRegistry.registerLoader(new ArchaicModelLoader());
             loaderRegistered = true;
             AMLMod.LOGGER.info("Registering Archaic Models...");
-            System.out.println("[AML-MODEL] ArchaicModelLoader registered!");
         }
 
         for (Item item : Item.REGISTRY) {
@@ -65,7 +63,6 @@ public class ModelRegistryHandler {
                 String textureName = archaicItem.aml$getTextureName();
                 if (textureName != null && !textureName.isEmpty()) {
                     ModelResourceLocation mrl = getItemModelResourceLocation(textureName);
-                    System.out.println("[AML-MODEL] Setting model for Item: " + item.getRegistryName() + " -> " + mrl);
                     ModelLoader.setCustomModelResourceLocation(item, 0, mrl);
                 }
             }
@@ -82,7 +79,6 @@ public class ModelRegistryHandler {
                             mrlInventory.getNamespace() + ":" + mrlInventory.getPath(),
                             "normal"
                     );
-                    System.out.println("[AML-MODEL] Setting model for Block: " + block.getRegistryName() + " -> " + mrlInventory);
                     ModelLoader.setCustomStateMapper(block, new ArchaicStateMapper(mrlBlock));
                 }
             }
