@@ -2,6 +2,7 @@ package com.github.dirify21.aml.asm.transformer;
 
 import com.github.dirify21.aml.classloader.AMLClassLoader;
 import net.minecraft.launchwrapper.IClassTransformer;
+
 import static com.github.dirify21.aml.asm.util.ASMUtil.*;
 
 public class AMLTransformer implements IClassTransformer {

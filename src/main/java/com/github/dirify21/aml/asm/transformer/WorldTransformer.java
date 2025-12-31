@@ -2,7 +2,9 @@ package com.github.dirify21.aml.asm.transformer;
 
 import com.github.dirify21.aml.asm.util.ASMUtil;
 import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.tree.*;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.MethodNode;
 
 public class WorldTransformer implements ASMUtil.TransformerRule {
     private static final String HELPER = "com/github/dirify21/aml/util/RedirectHelper";

@@ -15,9 +15,23 @@ public class TileEntityTransformer implements ASMUtil.TransformerRule {
             ctx.node().interfaces.add("net/minecraft/util/ITickable");
         }
 
+        boolean hasOnLoad = false;
+
         for (MethodNode m : ctx.node().methods) {
             if ((m.name.equals("updateEntity") || m.name.equals("func_145845_h")) && m.desc.equals("()V")) {
                 m.name = "func_73660_a";
+            }
+
+            if (m.name.equals("onLoad") && m.desc.equals("()V")) {
+                hasOnLoad = true;
+                for (AbstractInsnNode i : m.instructions.toArray()) {
+                    if (i.getOpcode() == Opcodes.RETURN) {
+                        InsnList list = new InsnList();
+                        list.add(new VarInsnNode(Opcodes.ALOAD, 0)); // this
+                        list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, "makeTransparent", "(Ljava/lang/Object;)V", false));
+                        m.instructions.insertBefore(i, list);
+                    }
+                }
             }
 
             for (AbstractInsnNode i : m.instructions.toArray()) {
@@ -39,6 +53,20 @@ public class TileEntityTransformer implements ASMUtil.TransformerRule {
                     }
                 }
             }
+        }
+
+        if (!hasOnLoad) {
+            MethodNode m = new MethodNode(Opcodes.ACC_PUBLIC, "onLoad", "()V", null, null);
+            InsnList list = m.instructions;
+
+            list.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            list.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, ctx.node().superName, "onLoad", "()V", false));
+
+            list.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, "makeTransparent", "(Ljava/lang/Object;)V", false));
+
+            list.add(new InsnNode(Opcodes.RETURN));
+            ctx.node().methods.add(m);
         }
     }
 

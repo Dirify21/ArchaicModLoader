@@ -1,7 +1,11 @@
 package com.github.dirify21.aml.asm.util;
 
-import org.objectweb.asm.*;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Label;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.*;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -79,22 +83,36 @@ public class ASMUtil {
     }
 
     @FunctionalInterface
-    public interface TransformerRule extends Consumer<ClassContext> {}
+    public interface TransformerRule extends Consumer<ClassContext> {
+    }
 
     public interface MethodBodyBuilder {
         MethodBodyBuilder loadArg(int index);
+
         MethodBodyBuilder ldc(Object value);
+
         MethodBodyBuilder invokeVirtual(String owner, String name, String desc);
+
         MethodBodyBuilder invokeInterface(String owner, String name, String desc);
+
         MethodBodyBuilder invokeStatic(String owner, String name, String desc);
+
         MethodBodyBuilder getStaticField(String owner, String name, String desc);
+
         MethodBodyBuilder putStaticField(String owner, String name, String desc);
+
         MethodBodyBuilder putField(String owner, String name, String desc);
+
         MethodBodyBuilder createNewObject(String type, String ctor, Consumer<MethodBodyBuilder> args);
+
         MethodBodyBuilder pop();
+
         MethodBodyBuilder swap();
+
         MethodBodyBuilder ifNull(Runnable branch);
+
         void returnValue();
+
         void returnObject();
     }
 
@@ -175,26 +193,87 @@ public class ASMUtil {
 
         private MethodBodyBuilder createBuilder(MethodNode mn) {
             return new MethodBodyBuilder() {
-                @Override public MethodBodyBuilder loadArg(int i) { mn.visitVarInsn(Opcodes.ALOAD, i); return this; }
-                @Override public MethodBodyBuilder ldc(Object v) { mn.visitLdcInsn(v); return this; }
-                @Override public MethodBodyBuilder pop() { mn.visitInsn(Opcodes.POP); return this; }
-                @Override public MethodBodyBuilder swap() { mn.visitInsn(Opcodes.SWAP); return this; }
-                @Override public void returnValue() { mn.visitInsn(Opcodes.RETURN); }
-                @Override public void returnObject() { mn.visitInsn(Opcodes.ARETURN); }
-                @Override public MethodBodyBuilder getStaticField(String o, String n, String d) { mn.visitFieldInsn(Opcodes.GETSTATIC, o, n, d); return this; }
-                @Override public MethodBodyBuilder putStaticField(String o, String n, String d) { mn.visitFieldInsn(Opcodes.PUTSTATIC, o, n, d); return this; }
-                @Override public MethodBodyBuilder putField(String o, String n, String d) { mn.visitFieldInsn(Opcodes.PUTFIELD, o, n, d); return this; }
-                @Override public MethodBodyBuilder invokeVirtual(String o, String n, String d) { mn.visitMethodInsn(Opcodes.INVOKEVIRTUAL, o, n, d, false); return this; }
-                @Override public MethodBodyBuilder invokeInterface(String o, String n, String d) { mn.visitMethodInsn(Opcodes.INVOKEINTERFACE, o, n, d, true); return this; }
-                @Override public MethodBodyBuilder invokeStatic(String o, String n, String d) { mn.visitMethodInsn(Opcodes.INVOKESTATIC, o, n, d, false); return this; }
-                @Override public MethodBodyBuilder createNewObject(String t, String c, Consumer<MethodBodyBuilder> a) {
+                @Override
+                public MethodBodyBuilder loadArg(int i) {
+                    mn.visitVarInsn(Opcodes.ALOAD, i);
+                    return this;
+                }
+
+                @Override
+                public MethodBodyBuilder ldc(Object v) {
+                    mn.visitLdcInsn(v);
+                    return this;
+                }
+
+                @Override
+                public MethodBodyBuilder pop() {
+                    mn.visitInsn(Opcodes.POP);
+                    return this;
+                }
+
+                @Override
+                public MethodBodyBuilder swap() {
+                    mn.visitInsn(Opcodes.SWAP);
+                    return this;
+                }
+
+                @Override
+                public void returnValue() {
+                    mn.visitInsn(Opcodes.RETURN);
+                }
+
+                @Override
+                public void returnObject() {
+                    mn.visitInsn(Opcodes.ARETURN);
+                }
+
+                @Override
+                public MethodBodyBuilder getStaticField(String o, String n, String d) {
+                    mn.visitFieldInsn(Opcodes.GETSTATIC, o, n, d);
+                    return this;
+                }
+
+                @Override
+                public MethodBodyBuilder putStaticField(String o, String n, String d) {
+                    mn.visitFieldInsn(Opcodes.PUTSTATIC, o, n, d);
+                    return this;
+                }
+
+                @Override
+                public MethodBodyBuilder putField(String o, String n, String d) {
+                    mn.visitFieldInsn(Opcodes.PUTFIELD, o, n, d);
+                    return this;
+                }
+
+                @Override
+                public MethodBodyBuilder invokeVirtual(String o, String n, String d) {
+                    mn.visitMethodInsn(Opcodes.INVOKEVIRTUAL, o, n, d, false);
+                    return this;
+                }
+
+                @Override
+                public MethodBodyBuilder invokeInterface(String o, String n, String d) {
+                    mn.visitMethodInsn(Opcodes.INVOKEINTERFACE, o, n, d, true);
+                    return this;
+                }
+
+                @Override
+                public MethodBodyBuilder invokeStatic(String o, String n, String d) {
+                    mn.visitMethodInsn(Opcodes.INVOKESTATIC, o, n, d, false);
+                    return this;
+                }
+
+                @Override
+                public MethodBodyBuilder createNewObject(String t, String c, Consumer<MethodBodyBuilder> a) {
                     mn.visitTypeInsn(Opcodes.NEW, t);
                     mn.visitInsn(Opcodes.DUP);
                     a.accept(this);
                     mn.visitMethodInsn(Opcodes.INVOKESPECIAL, t, "<init>", c, false);
                     return this;
                 }
-                @Override public MethodBodyBuilder ifNull(Runnable b) {
+
+                @Override
+                public MethodBodyBuilder ifNull(Runnable b) {
                     Label end = new Label();
                     mn.visitJumpInsn(Opcodes.IFNONNULL, end);
                     b.run();

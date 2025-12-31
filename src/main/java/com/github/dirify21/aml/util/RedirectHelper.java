@@ -7,20 +7,28 @@ import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.entity.RenderManager;
 import net.minecraft.init.MobEffects;
-import net.minecraft.item.*;
-import net.minecraft.potion.*;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemFood;
+import net.minecraft.item.ItemStack;
+import net.minecraft.potion.Potion;
+import net.minecraft.potion.PotionEffect;
+import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.*;
+import net.minecraft.util.math.AxisAlignedBB;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
-import net.minecraftforge.fml.common.*;
+import net.minecraftforge.fml.common.Loader;
+import net.minecraftforge.fml.common.ModContainer;
 import net.minecraftforge.fml.common.registry.GameRegistry;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 public class RedirectHelper {
     private static final Map<String, Potion> POTION_MAP = new HashMap<>();
+
     static {
         POTION_MAP.put("field_76424_c", MobEffects.SPEED);
         POTION_MAP.put("field_76421_d", MobEffects.SLOWNESS);
@@ -43,6 +51,11 @@ public class RedirectHelper {
         POTION_MAP.put("field_76436_u", MobEffects.POISON);
         POTION_MAP.put("field_76435_v", MobEffects.WITHER);
     }
+
+    public static void makeTransparent(Object tile) {
+        ((TileEntity) tile).getBlockType().setLightOpacity(0);
+    }
+
 
     public static PotionEffect createPotionEffect(int id, int duration, int amplifier) {
         Potion p = Potion.getPotionById(id);
@@ -68,13 +81,33 @@ public class RedirectHelper {
         return world.isAirBlock(new BlockPos(x, y, z));
     }
 
-    public static Item setTextureNameRedirect(Item i, String n) { return (i instanceof IArchaicItem a) ? a.aml$setTextureName(n) : i; }
-    public static Block setBlockTextureNameRedirect(Block b, String n) { return (b instanceof IArchaicBlock a) ? a.aml$setBlockTextureName(n) : b; }
-    public static Potion getPotionFieldRedirect(String f) { return POTION_MAP.getOrDefault(f, MobEffects.LUCK); }
-    public static int getPotionIdRedirect(Potion p) { return Potion.getIdFromPotion(p); }
-    public static int getX(net.minecraft.tileentity.TileEntity te) { return te.getPos().getX(); }
-    public static int getY(net.minecraft.tileentity.TileEntity te) { return te.getPos().getY(); }
-    public static int getZ(net.minecraft.tileentity.TileEntity te) { return te.getPos().getZ(); }
+    public static Item setTextureNameRedirect(Item i, String n) {
+        return (i instanceof IArchaicItem a) ? a.aml$setTextureName(n) : i;
+    }
+
+    public static Block setBlockTextureNameRedirect(Block b, String n) {
+        return (b instanceof IArchaicBlock a) ? a.aml$setBlockTextureName(n) : b;
+    }
+
+    public static Potion getPotionFieldRedirect(String f) {
+        return POTION_MAP.getOrDefault(f, MobEffects.LUCK);
+    }
+
+    public static int getPotionIdRedirect(Potion p) {
+        return Potion.getIdFromPotion(p);
+    }
+
+    public static int getX(net.minecraft.tileentity.TileEntity te) {
+        return te.getPos().getX();
+    }
+
+    public static int getY(net.minecraft.tileentity.TileEntity te) {
+        return te.getPos().getY();
+    }
+
+    public static int getZ(net.minecraft.tileentity.TileEntity te) {
+        return te.getPos().getZ();
+    }
 
     public static void registerTileEntityRedirect(Class<? extends net.minecraft.tileentity.TileEntity> c, String id) {
         ModContainer mc = Loader.instance().activeModContainer();
