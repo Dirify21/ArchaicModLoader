@@ -55,9 +55,7 @@ public class PotionTransformer implements ASMUtil.TransformerRule {
                 prev = prev.getPrevious();
                 m.instructions.remove(target);
             } else if (prev.getOpcode() == Opcodes.NEW) {
-                AbstractInsnNode target = prev;
-                prev = prev.getPrevious();
-                m.instructions.remove(target);
+                m.instructions.remove(prev);
                 break;
             } else {
                 prev = prev.getPrevious();

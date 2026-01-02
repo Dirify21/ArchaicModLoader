@@ -14,15 +14,26 @@ public class RegistryTransformer implements ASMUtil.TransformerRule {
         for (MethodNode m : ctx.node().methods) {
             for (AbstractInsnNode i : m.instructions.toArray()) {
                 if (i instanceof MethodInsnNode min) {
+
                     if (min.owner.equals("net/minecraftforge/fml/common/registry/GameRegistry") &&
                             min.name.equals("addRecipe") &&
                             min.desc.equals("(Lnet/minecraft/item/ItemStack;[Ljava/lang/Object;)V")) {
-
                         min.setOpcode(Opcodes.INVOKESTATIC);
                         min.owner = HELPER;
                         min.name = "addRecipeRedirect";
                         min.desc = "(Lnet/minecraft/item/ItemStack;[Ljava/lang/Object;)V";
                     }
+
+                    if (min.owner.equals("net/minecraftforge/fml/common/registry/GameRegistry") &&
+                            min.name.equals("addShapelessRecipe") &&
+                            min.desc.equals("(Lnet/minecraft/item/ItemStack;[Ljava/lang/Object;)V")) {
+
+                        min.setOpcode(Opcodes.INVOKESTATIC);
+                        min.owner = HELPER;
+                        min.name = "addShapelessRecipeRedirect";
+                        min.desc = "(Lnet/minecraft/item/ItemStack;[Ljava/lang/Object;)V";
+                    }
+
                     if (min.owner.equals("net/minecraftforge/fml/common/registry/GameRegistry") &&
                             min.name.equals("registerTileEntity")) {
                         min.setOpcode(Opcodes.INVOKESTATIC);

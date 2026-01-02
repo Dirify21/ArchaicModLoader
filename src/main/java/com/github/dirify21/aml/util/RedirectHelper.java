@@ -2,6 +2,7 @@ package com.github.dirify21.aml.util;
 
 import com.github.dirify21.aml.api.IArchaicBlock;
 import com.github.dirify21.aml.api.IArchaicItem;
+import com.github.dirify21.aml.api.IIcon;
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
@@ -13,15 +14,18 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.potion.Potion;
 import net.minecraft.potion.PotionEffect;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.EnumFacing;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraftforge.fml.common.Loader;
 import net.minecraftforge.fml.common.ModContainer;
+import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import net.minecraftforge.fml.common.registry.GameRegistry;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
+import net.minecraftforge.oredict.ShapelessOreRecipe;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -52,10 +56,16 @@ public class RedirectHelper {
         POTION_MAP.put("field_76435_v", MobEffects.WITHER);
     }
 
+    public static String getTextureNameRedirect(Block block) {
+        if (block instanceof IArchaicBlock) {
+            return ((IArchaicBlock) block).aml$getBlockTextureName();
+        }
+        return null;
+    }
+
     public static void makeTransparent(Object tile) {
         ((TileEntity) tile).getBlockType().setLightOpacity(0);
     }
-
 
     public static PotionEffect createPotionEffect(int id, int duration, int amplifier) {
         Potion p = Potion.getPotionById(id);
@@ -129,5 +139,28 @@ public class RedirectHelper {
     @SideOnly(Side.CLIENT)
     public static RenderManager getRenderManager() {
         return Minecraft.getMinecraft().getRenderManager();
+    }
+
+    public static void addShapelessRecipeRedirect(ItemStack output, Object[] params) {
+        if (output == null || output.isEmpty()) return;
+        ResourceLocation recipeName = new ResourceLocation("aml_virtual", "shapeless_" + System.nanoTime());
+        ShapelessOreRecipe recipe = new ShapelessOreRecipe(null, output, params);
+        recipe.setRegistryName(recipeName);
+        ForgeRegistries.RECIPES.register(recipe);
+    }
+
+    public static EnumFacing getFacingFromId(int side) {
+        return EnumFacing.byIndex(side);
+    }
+
+    public static int getIdFromFacing(EnumFacing facing) {
+        return facing.getIndex();
+    }
+
+    public static IIcon getIconForBlock(Block block, EnumFacing facing, int meta) {
+        if (block instanceof IArchaicBlock) {
+            return ((IArchaicBlock) block).aml$getIcon(facing.getIndex(), meta);
+        }
+        return null;
     }
 }

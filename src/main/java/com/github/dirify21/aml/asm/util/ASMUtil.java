@@ -12,21 +12,37 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class ASMUtil {
-
     public static byte[] process(byte[] basicClass, TransformerRule... rules) {
         if (basicClass == null) return null;
         ClassNode classNode = new ClassNode();
         new ClassReader(basicClass).accept(classNode, 0);
         ClassContext context = new ClassContext(classNode);
         for (TransformerRule rule : rules) rule.accept(context);
+
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES) {
             @Override
-            protected String getCommonSuperClass(String t1, String t2) {
-                return "java/lang/Object";
+            protected String getCommonSuperClass(String type1, String type2) {
+                if (type1.equals(type2)) return type1;
+                try {
+                    return super.getCommonSuperClass(type1, type2);
+                } catch (Exception e) {
+                    return "java/lang/Object";
+                }
             }
         };
-        classNode.accept(writer);
-        return writer.toByteArray();
+
+        try {
+            classNode.accept(writer);
+            return writer.toByteArray();
+        } catch (Throwable t) {
+            ClassWriter fallbackWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+            classNode.accept(fallbackWriter);
+            return fallbackWriter.toByteArray();
+        }
+    }
+
+    public static TransformerRule updateAnn(String desc, String key, Function<Object, Object> updater) {
+        return context -> context.updateAnnotationValue(desc, key, updater);
     }
 
     public static TransformerRule remap(String oldPath, String newPath) {
@@ -89,6 +105,9 @@ public class ASMUtil {
     public interface MethodBodyBuilder {
         MethodBodyBuilder loadArg(int index);
 
+        MethodBodyBuilder dup();
+
+
         MethodBodyBuilder ldc(Object value);
 
         MethodBodyBuilder invokeVirtual(String owner, String name, String desc);
@@ -128,6 +147,27 @@ public class ASMUtil {
             updateAnnotationValue(node.visibleAnnotations, desc, key, value);
             return this;
         }
+
+
+        public ClassContext updateAnnotationValue(String annDesc, String key, Function<Object, Object> updater) {
+            String desc = annDesc.startsWith("L") ? annDesc : "L" + annDesc.replace('.', '/') + ";";
+            if (node.visibleAnnotations == null) return this;
+
+            for (AnnotationNode a : node.visibleAnnotations) {
+                if (a.desc.equals(desc)) {
+                    if (a.values == null) return this;
+                    for (int i = 0; i < a.values.size(); i += 2) {
+                        if (key.equals(a.values.get(i))) {
+                            Object oldValue = a.values.get(i + 1);
+                            Object newValue = updater.apply(oldValue);
+                            a.values.set(i + 1, newValue);
+                        }
+                    }
+                }
+            }
+            return this;
+        }
+
 
         private void updateAnnotationValue(List<AnnotationNode> anns, String d, String k, Object v) {
             for (AnnotationNode a : anns) {
@@ -180,19 +220,29 @@ public class ASMUtil {
                         node.methods.add(newMn);
                         return newMn;
                     });
+            mn.instructions.clear();
+
+            mn.maxLocals = 8;
+            mn.maxStack = 8;
 
             MethodBodyBuilder builder = createBuilder(mn);
-            if (mn.instructions.size() == 0) {
-                mn.visitCode();
-                generator.accept(builder);
-                if (desc.endsWith("V")) builder.returnValue();
-            } else {
-                generator.accept(builder);
+            mn.visitCode();
+            generator.accept(builder);
+
+            if (desc.endsWith("V") && (mn.instructions.getLast() == null || mn.instructions.getLast().getOpcode() != Opcodes.RETURN)) {
+                builder.returnValue();
             }
         }
 
         private MethodBodyBuilder createBuilder(MethodNode mn) {
             return new MethodBodyBuilder() {
+
+                @Override
+                public MethodBodyBuilder dup() {
+                    mn.visitInsn(org.objectweb.asm.Opcodes.DUP);
+                    return this;
+                }
+
                 @Override
                 public MethodBodyBuilder loadArg(int i) {
                     mn.visitVarInsn(Opcodes.ALOAD, i);

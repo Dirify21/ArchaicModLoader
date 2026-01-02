@@ -13,13 +13,17 @@ public class AMLTransformer implements IClassTransformer {
         return new AMLTransformer().transform(basicClass);
     }
 
+
     public byte[] transform(byte[] basicClass) {
         return process(basicClass,
                 remap("cpw/mods/fml", "net/minecraftforge/fml"),
-                remap("cpw.mods.fml", "net.minecraftforge.fml"),
-                setAnn("net.minecraftforge.fml.common.Mod", "acceptedMinecraftVersions", "[1.12.2]"),
+                setAnn("net/minecraftforge/fml/common/Mod", "acceptedMinecraftVersions", "[1.12.2]"),
+                remap("net/minecraft/util/IIcon", "com/github/dirify21/aml/api/IIcon"),
+                remap("net/minecraft/client/renderer/texture/IIconRegister", "com/github/dirify21/aml/api/IIconRegister"),
+                updateAnn("net/minecraftforge/fml/common/Mod", "modid", v -> v.toString().toLowerCase()),
                 redirect("func_111206_d", HELPER, "setTextureNameRedirect", "(Lnet/minecraft/item/Item;Ljava/lang/String;)Lnet/minecraft/item/Item;"),
                 redirect("func_149658_d", HELPER, "setBlockTextureNameRedirect", "(Lnet/minecraft/block/Block;Ljava/lang/String;)Lnet/minecraft/block/Block;"),
+                redirect("func_149641_N", HELPER, "getTextureNameRedirect", "(Lnet/minecraft/block/Block;)Ljava/lang/String;"),
                 remap("net/minecraft/util/AxisAlignedBB", "net/minecraft/util/math/AxisAlignedBB"),
                 remap("worldObj", "field_72995_K"),
                 new TileEntityTransformer(),
@@ -28,6 +32,7 @@ public class AMLTransformer implements IClassTransformer {
                 new WorldTransformer(),
                 new AABBTransformer(),
                 new RenderTransformer(),
+                new LifecycleTransformer(),
                 ctx -> ctx.redirectFieldToMethod("net/minecraft/potion/Potion", "field_76415_H", HELPER, "getPotionIdRedirect", "(Lnet/minecraft/potion/Potion;)I")
         );
     }
@@ -43,7 +48,7 @@ public class AMLTransformer implements IClassTransformer {
             );
         }
 
-        if (transformedName.startsWith("com.github.dirify21.aml.") || !AMLClassLoader.isArchaicClass(transformedName)) {
+        if (!AMLClassLoader.isPackageMatch(transformedName)) {
             return basicClass;
         }
 
@@ -51,45 +56,18 @@ public class AMLTransformer implements IClassTransformer {
     }
 
     private void buildRegisterItem(MethodBodyBuilder m) {
-        String owner = "net/minecraft/item/Item";
         m.loadArg(0);
-        m.invokeVirtual(owner, "getRegistryName", "()Lnet/minecraft/util/ResourceLocation;");
-        m.ifNull(() -> {
-            m.loadArg(0);
-            m.createNewObject("net/minecraft/util/ResourceLocation", "(Ljava/lang/String;)V", a -> a.loadArg(1));
-            m.invokeVirtual(owner, "setRegistryName", "(Lnet/minecraft/util/ResourceLocation;)Lnet/minecraftforge/registries/IForgeRegistryEntry;");
-            m.pop();
-        });
-        m.getStaticField("net/minecraftforge/fml/common/registry/ForgeRegistries", "ITEMS", "Lnet/minecraftforge/registries/IForgeRegistry;");
-        m.loadArg(0);
-        m.invokeInterface("net/minecraftforge/registries/IForgeRegistry", "register", "(Lnet/minecraftforge/registries/IForgeRegistryEntry;)V");
+        m.loadArg(1);
+        m.invokeStatic("com/github/dirify21/aml/util/RegistryHolder", "queueItem", "(Lnet/minecraft/item/Item;Ljava/lang/String;)V");
         m.returnValue();
     }
 
     private void buildRegisterBlock(MethodBodyBuilder m) {
-        String blockOwner = "net/minecraft/block/Block";
-        String itemOwner = "net/minecraft/item/Item";
-        String regOwner = "net/minecraftforge/registries/IForgeRegistry";
-
         m.loadArg(0);
-        m.invokeVirtual(blockOwner, "getRegistryName", "()Lnet/minecraft/util/ResourceLocation;");
-        m.ifNull(() -> {
-            m.loadArg(0);
-            m.createNewObject("net/minecraft/util/ResourceLocation", "(Ljava/lang/String;)V", a -> a.loadArg(1));
-            m.invokeVirtual(blockOwner, "setRegistryName", "(Lnet/minecraft/util/ResourceLocation;)Lnet/minecraftforge/registries/IForgeRegistryEntry;");
-            m.pop();
-        });
-
-        m.getStaticField("net/minecraftforge/fml/common/registry/ForgeRegistries", "BLOCKS", "Lnet/minecraftforge/registries/IForgeRegistry;");
-        m.loadArg(0);
-        m.invokeInterface(regOwner, "register", "(Lnet/minecraftforge/registries/IForgeRegistryEntry;)V");
-
-        m.getStaticField("net/minecraftforge/fml/common/registry/ForgeRegistries", "ITEMS", "Lnet/minecraftforge/registries/IForgeRegistry;");
-        m.createNewObject("net/minecraft/item/ItemBlock", "(Lnet/minecraft/block/Block;)V", a -> a.loadArg(0));
-        m.loadArg(0);
-        m.invokeVirtual(blockOwner, "getRegistryName", "()Lnet/minecraft/util/ResourceLocation;");
-        m.invokeVirtual(itemOwner, "setRegistryName", "(Lnet/minecraft/util/ResourceLocation;)Lnet/minecraftforge/registries/IForgeRegistryEntry;");
-        m.invokeInterface(regOwner, "register", "(Lnet/minecraftforge/registries/IForgeRegistryEntry;)V");
+        m.loadArg(1);
+        m.invokeStatic("com/github/dirify21/aml/util/RegistryHolder",
+                "queueBlock",
+                "(Lnet/minecraft/block/Block;Ljava/lang/String;)V");
 
         m.loadArg(0);
         m.returnObject();

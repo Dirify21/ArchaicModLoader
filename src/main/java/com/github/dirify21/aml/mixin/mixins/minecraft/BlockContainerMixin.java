@@ -23,7 +23,6 @@ public abstract class BlockContainerMixin extends Block {
                 return EnumBlockRenderType.MODEL;
             }
         }
-
         return EnumBlockRenderType.INVISIBLE;
     }
 }

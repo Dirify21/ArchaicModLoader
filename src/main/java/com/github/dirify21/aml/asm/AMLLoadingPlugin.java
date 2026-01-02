@@ -10,6 +10,11 @@ public class AMLLoadingPlugin implements IFMLLoadingPlugin {
 
     public static boolean isReadyToTransform;
 
+    public AMLLoadingPlugin() {
+        AMLClassLoader.init();
+        isReadyToTransform = true;
+    }
+
     @Override
     public @Nullable String[] getASMTransformerClass() {
         return new String[]{
@@ -29,8 +34,6 @@ public class AMLLoadingPlugin implements IFMLLoadingPlugin {
 
     @Override
     public void injectData(Map<String, Object> map) {
-        AMLClassLoader.init();
-        isReadyToTransform = true;
     }
 
     @Override

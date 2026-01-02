@@ -27,7 +27,7 @@ public class TileEntityTransformer implements ASMUtil.TransformerRule {
                 for (AbstractInsnNode i : m.instructions.toArray()) {
                     if (i.getOpcode() == Opcodes.RETURN) {
                         InsnList list = new InsnList();
-                        list.add(new VarInsnNode(Opcodes.ALOAD, 0)); // this
+                        list.add(new VarInsnNode(Opcodes.ALOAD, 0));
                         list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, "makeTransparent", "(Ljava/lang/Object;)V", false));
                         m.instructions.insertBefore(i, list);
                     }

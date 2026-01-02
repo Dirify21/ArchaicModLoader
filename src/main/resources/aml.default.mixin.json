@@ -3,7 +3,9 @@
   "package": "com.github.dirify21.aml.mixin.mixins.minecraft",
   "compatibilityLevel": "JAVA_8",
   "target": "@env(DEFAULT)",
-  "client": [],
+  "client": [
+    "MinecraftMixin"
+  ],
   "mixins": [
     "BlockContainerMixin",
     "BlockMixin",

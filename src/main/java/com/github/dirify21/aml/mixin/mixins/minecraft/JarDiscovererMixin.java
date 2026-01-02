@@ -1,8 +1,10 @@
 package com.github.dirify21.aml.mixin.mixins.minecraft;
 
 import com.github.dirify21.aml.asm.transformer.AMLTransformer;
+import com.github.dirify21.aml.classloader.AMLClassLoader;
 import net.minecraftforge.fml.common.discovery.JarDiscoverer;
 import net.minecraftforge.fml.common.discovery.asm.ASMModParser;
+import org.objectweb.asm.ClassReader;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -14,14 +16,24 @@ import java.io.InputStream;
 
 @Mixin(value = JarDiscoverer.class, remap = false)
 public abstract class JarDiscovererMixin {
+
     @Redirect(
             method = "findClassesASM",
             at = @At(value = "NEW", target = "net/minecraftforge/fml/common/discovery/asm/ASMModParser")
     )
     private ASMModParser redirectASMModParser(InputStream is) throws IOException {
         byte[] originalBytes = readStream(is);
-        byte[] patchedBytes = AMLTransformer.patchArchaicClass(originalBytes);
-        return new ASMModParser(new ByteArrayInputStream(patchedBytes));
+
+        ClassReader cr = new ClassReader(originalBytes);
+        String internalName = cr.getClassName();
+        String dotName = internalName.replace('/', '.');
+
+        if (AMLClassLoader.isArchaicClass(dotName)) {
+            byte[] patchedBytes = AMLTransformer.patchArchaicClass(originalBytes);
+            return new ASMModParser(new ByteArrayInputStream(patchedBytes));
+        }
+
+        return new ASMModParser(new ByteArrayInputStream(originalBytes));
     }
 
     private byte[] readStream(InputStream is) throws IOException {
