@@ -1,16 +1,11 @@
 package com.github.dirify21.aml.asm.util;
 
-import org.objectweb.asm.AnnotationVisitor;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.FieldVisitor;
-import org.objectweb.asm.MethodVisitor;
-import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.*;
 import org.objectweb.asm.commons.ClassRemapper;
 import org.objectweb.asm.commons.Remapper;
 import org.objectweb.asm.tree.ClassNode;
 
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 @SuppressWarnings("unused")
@@ -50,14 +45,23 @@ public final class ASMUtil {
             return this;
         }
 
-        public Transformer transformNode(java.util.function.Consumer<ClassNode> action) {
+        public Transformer transformNode(Consumer<ClassNode> action) {
             ClassReader reader = new ClassReader(data);
             ClassNode node = new ClassNode(Opcodes.ASM9);
             reader.accept(node, 0);
 
             action.accept(node);
 
-            ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
+            ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES) {
+                @Override
+                protected String getCommonSuperClass(String type1, String type2) {
+                    try {
+                        return super.getCommonSuperClass(type1, type2);
+                    } catch (Exception e) {
+                        return "java/lang/Object";
+                    }
+                }
+            };
             node.accept(writer);
             this.data = writer.toByteArray();
             return this;
