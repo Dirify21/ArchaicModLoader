@@ -1,17 +1,15 @@
 package com.github.dirify21.aml.client;
 
 import com.gihtub.dirify21.aml.Reference;
-import com.github.dirify21.aml.AMLMod;
-import com.github.dirify21.aml.api.IArchaicBlock;
-import com.github.dirify21.aml.api.IArchaicItem;
-import com.github.dirify21.aml.api.IIcon;
-import com.github.dirify21.aml.api.IIconRegister;
 import com.github.dirify21.aml.client.model.ArchaicModelLoader;
 import com.github.dirify21.aml.client.model.block.ArchaicStateMapper;
+import com.github.dirify21.aml.interfaces.IArchaicBlock;
+import com.github.dirify21.aml.interfaces.IArchaicItem;
 import net.minecraft.block.Block;
 import net.minecraft.client.renderer.block.model.ModelResourceLocation;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.item.Item;
+import net.minecraft.util.IIcon;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.client.event.ModelRegistryEvent;
 import net.minecraftforge.client.event.TextureStitchEvent;
@@ -32,16 +30,11 @@ public class ModelRegistryHandler {
     private static boolean loaderRegistered = false;
 
     private static ResourceLocation fixTexturePath(String path) {
-        if (path.contains(":")) {
-            String[] parts = path.split(":", 2);
-            String domain = parts[0];
-            String name = parts[1];
-            if (!name.startsWith("blocks/")) {
-                name = "blocks/" + name;
-            }
-            return new ResourceLocation(domain, name);
-        }
-        return new ResourceLocation("minecraft", path.startsWith("blocks/") ? path : "blocks/" + path);
+        String[] parts = path.split(":", 2);
+        String domain = parts.length > 1 ? parts[0] : "minecraft";
+        String name = parts.length > 1 ? parts[1] : parts[0];
+
+        return new ResourceLocation(domain, name.startsWith("blocks/") ? name : "blocks/" + name);
     }
 
     @SubscribeEvent
@@ -49,34 +42,24 @@ public class ModelRegistryHandler {
         if (!loaderRegistered) {
             ModelLoaderRegistry.registerLoader(new ArchaicModelLoader());
             loaderRegistered = true;
-            AMLMod.LOGGER.info("Registering Models...");
         }
 
-        for (Item item : Item.REGISTRY) {
-            if (item instanceof IArchaicItem archaicItem) {
-                String textureName = archaicItem.aml$getTextureName();
-                if (textureName != null && !textureName.isEmpty()) {
-                    ModelResourceLocation mrl = getItemModelResourceLocation(textureName);
-                    ModelLoader.setCustomModelResourceLocation(item, 0, mrl);
-                }
+        Item.REGISTRY.forEach(item -> {
+            String textureName = ((IArchaicItem) item).aml$getTextureName();
+            if (textureName != null && !textureName.isEmpty()) {
+                ModelLoader.setCustomModelResourceLocation(item, 0, getItemModelResourceLocation(textureName));
             }
-        }
+        });
 
-        for (Block block : Block.REGISTRY) {
-            if (block instanceof IArchaicBlock archaicBlock) {
-                String textureName = archaicBlock.aml$getBlockTextureName();
-                if (textureName != null && !textureName.isEmpty()) {
-                    Item itemBlock = Item.getItemFromBlock(block);
-                    ModelResourceLocation mrlInventory = getBlockModelResourceLocation(textureName);
-                    ModelLoader.setCustomModelResourceLocation(itemBlock, 0, mrlInventory);
-                    ModelResourceLocation mrlBlock = new ModelResourceLocation(
-                            mrlInventory.getNamespace() + ":" + mrlInventory.getPath(),
-                            "normal"
-                    );
-                    ModelLoader.setCustomStateMapper(block, new ArchaicStateMapper(mrlBlock));
-                }
+        Block.REGISTRY.forEach(block -> {
+            String textureName = ((IArchaicBlock) block).aml$getBlockTextureName();
+            if (textureName != null && !textureName.isEmpty()) {
+                Item itemBlock = Item.getItemFromBlock(block);
+                ModelResourceLocation mrlInventory = getBlockModelResourceLocation(textureName);
+                ModelLoader.setCustomModelResourceLocation(itemBlock, 0, mrlInventory);
+                ModelLoader.setCustomStateMapper(block, new ArchaicStateMapper(new ModelResourceLocation(mrlInventory.toString(), "normal")));
             }
-        }
+        });
     }
 
     private static @NotNull ModelResourceLocation getItemModelResourceLocation(String textureName) {
@@ -88,42 +71,39 @@ public class ModelRegistryHandler {
     }
 
     private static @NotNull ModelResourceLocation getArchaicResourceLocation(String textureName, String typeDir, String variant) {
-        ResourceLocation textureLoc;
-        if (textureName.contains(":")) {
-            String[] parts = textureName.split(":", 2);
-            textureLoc = new ResourceLocation(parts[0], typeDir + "/" + parts[1]);
-        } else {
-            textureLoc = new ResourceLocation("minecraft", typeDir + "/" + textureName);
-        }
+        String[] parts = textureName.split(":", 2);
+        ResourceLocation textureLoc = (parts.length > 1)
+                ? new ResourceLocation(parts[0], typeDir + "/" + parts[1])
+                : new ResourceLocation("minecraft", typeDir + "/" + textureName);
 
-        ResourceLocation virtualPath = new ResourceLocation("aml_virtual", textureLoc.toString());
-        return new ModelResourceLocation(virtualPath, variant);
+        return new ModelResourceLocation(new ResourceLocation("aml_virtual", textureLoc.toString()), variant);
     }
 
     @SubscribeEvent
     public static void onTextureStitch(TextureStitchEvent.Pre event) {
         TEXTURE_TO_BLOCK.clear();
-        IIconRegister customRegister = name -> {
-            ResourceLocation loc = fixTexturePath(name);
-            return new ArchaicIcon(event.getMap().registerSprite(loc));
-        };
 
-        for (Block block : Block.REGISTRY) {
-            if (block instanceof IArchaicBlock archaic) {
-                String texName = archaic.aml$getBlockTextureName();
-                if (texName != null) {
-                    String key = texName.toLowerCase().replace("blocks/", "");
-                    TEXTURE_TO_BLOCK.put(key, block);
-                }
-                archaic.aml$registerBlockIcons(customRegister);
-            }
-        }
+        Block.REGISTRY.forEach(block -> {
+            String texName = ((IArchaicBlock) block).aml$getBlockTextureName();
+            if (texName != null) TEXTURE_TO_BLOCK.put(texName.toLowerCase().replace("blocks/", ""), block);
+            ((IArchaicBlock) block).func_149651_a(name -> new ArchaicIcon(event.getMap().registerSprite(fixTexturePath(name))));
+        });
     }
 
     private record ArchaicIcon(TextureAtlasSprite sprite) implements IIcon {
         @Override
         public String getIconName() {
             return sprite.getIconName();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return sprite.getIconWidth();
+        }
+
+        @Override
+        public int getIconHeight() {
+            return sprite.getIconHeight();
         }
 
         @Override
@@ -137,6 +117,11 @@ public class ModelRegistryHandler {
         }
 
         @Override
+        public float getInterpolatedU(double u) {
+            return sprite.getInterpolatedU(u);
+        }
+
+        @Override
         public float getMinV() {
             return sprite.getMinV();
         }
@@ -145,7 +130,11 @@ public class ModelRegistryHandler {
         public float getMaxV() {
             return sprite.getMaxV();
         }
-    }
 
+        @Override
+        public float getInterpolatedV(double v) {
+            return sprite.getInterpolatedV(v);
+        }
+    }
 }
 

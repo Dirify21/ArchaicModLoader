@@ -1,336 +1,198 @@
 package com.github.dirify21.aml.asm.util;
 
+import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.Label;
+import org.objectweb.asm.FieldVisitor;
+import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.tree.*;
+import org.objectweb.asm.commons.ClassRemapper;
+import org.objectweb.asm.commons.Remapper;
+import org.objectweb.asm.tree.ClassNode;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
-public class ASMUtil {
-    public static byte[] process(byte[] basicClass, TransformerRule... rules) {
-        if (basicClass == null) return null;
-        ClassNode classNode = new ClassNode();
-        new ClassReader(basicClass).accept(classNode, 0);
-        ClassContext context = new ClassContext(classNode);
-        for (TransformerRule rule : rules) rule.accept(context);
+@SuppressWarnings("unused")
+public final class ASMUtil {
+    private ASMUtil() {
+    }
 
-        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES) {
-            @Override
-            protected String getCommonSuperClass(String type1, String type2) {
-                if (type1.equals(type2)) return type1;
-                try {
-                    return super.getCommonSuperClass(type1, type2);
-                } catch (Exception e) {
-                    return "java/lang/Object";
-                }
-            }
-        };
+    public static Transformer builder(byte[] initialClass) {
+        return new Transformer(initialClass);
+    }
 
-        try {
-            classNode.accept(writer);
-            return writer.toByteArray();
-        } catch (Throwable t) {
-            ClassWriter fallbackWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-            classNode.accept(fallbackWriter);
-            return fallbackWriter.toByteArray();
+    private static AnnotationVisitor wrapAnnotationVisitor(AnnotationVisitor av, String currentDesc, String targetDesc, String key, Function<Object, Object> mapper) {
+        if (currentDesc.equals(targetDesc)) {
+            return new AnnotationValueModifier(av, key, mapper);
         }
-    }
-
-    public static TransformerRule updateAnn(String desc, String key, Function<Object, Object> updater) {
-        return context -> context.updateAnnotationValue(desc, key, updater);
-    }
-
-    public static TransformerRule remap(String oldPath, String newPath) {
-        return context -> context.replaceInStrings(oldPath, newPath);
-    }
-
-    public static TransformerRule setAnn(String desc, String key, Object value) {
-        return context -> context.setAnnotationValue(desc, key, value);
-    }
-
-    public static TransformerRule redirect(String name, String owner, String newName, String desc) {
-        return context -> context.redirectMethod(name, owner, newName, desc);
-    }
-
-    private static void remapClassStrings(ClassNode cn, Function<String, String> r) {
-        cn.name = r.apply(cn.name);
-        cn.superName = r.apply(cn.superName);
-        if (cn.interfaces != null) cn.interfaces.replaceAll(r::apply);
-        processAnns(cn.visibleAnnotations, r);
-        processAnns(cn.invisibleAnnotations, r);
-        for (FieldNode f : cn.fields) {
-            f.desc = r.apply(f.desc);
-            processAnns(f.visibleAnnotations, r);
-        }
-        for (MethodNode m : cn.methods) {
-            m.desc = r.apply(m.desc);
-            processAnns(m.visibleAnnotations, r);
-            for (AbstractInsnNode i : m.instructions.toArray()) {
-                if (i instanceof MethodInsnNode min) {
-                    min.owner = r.apply(min.owner);
-                    min.desc = r.apply(min.desc);
-                } else if (i instanceof FieldInsnNode fin) {
-                    fin.owner = r.apply(fin.owner);
-                    fin.desc = r.apply(fin.desc);
-                } else if (i instanceof TypeInsnNode tin) {
-                    tin.desc = r.apply(tin.desc);
-                } else if (i instanceof LdcInsnNode ldc && ldc.cst instanceof String s) {
-                    ldc.cst = r.apply(s);
-                }
-            }
-        }
-    }
-
-    private static void processAnns(List<AnnotationNode> anns, Function<String, String> r) {
-        if (anns == null) return;
-        for (AnnotationNode a : anns) {
-            a.desc = r.apply(a.desc);
-            if (a.values != null) {
-                for (int i = 1; i < a.values.size(); i += 2) {
-                    if (a.values.get(i) instanceof String s) a.values.set(i, r.apply(s));
-                }
-            }
-        }
+        return av;
     }
 
     @FunctionalInterface
-    public interface TransformerRule extends Consumer<ClassContext> {
+    public interface TransformerRule {
+        byte[] accept(byte[] input) throws Exception;
     }
 
-    public interface MethodBodyBuilder {
-        MethodBodyBuilder loadArg(int index);
+    public static class Transformer {
+        private byte[] data;
 
-        MethodBodyBuilder dup();
-
-
-        MethodBodyBuilder ldc(Object value);
-
-        MethodBodyBuilder invokeVirtual(String owner, String name, String desc);
-
-        MethodBodyBuilder invokeInterface(String owner, String name, String desc);
-
-        MethodBodyBuilder invokeStatic(String owner, String name, String desc);
-
-        MethodBodyBuilder getStaticField(String owner, String name, String desc);
-
-        MethodBodyBuilder putStaticField(String owner, String name, String desc);
-
-        MethodBodyBuilder putField(String owner, String name, String desc);
-
-        MethodBodyBuilder createNewObject(String type, String ctor, Consumer<MethodBodyBuilder> args);
-
-        MethodBodyBuilder pop();
-
-        MethodBodyBuilder swap();
-
-        MethodBodyBuilder ifNull(Runnable branch);
-
-        void returnValue();
-
-        void returnObject();
-    }
-
-    public record ClassContext(ClassNode node) {
-        public ClassContext replaceInStrings(String oldText, String newText) {
-            remapClassStrings(node, s -> s == null ? null : s.replace(oldText, newText));
-            return this;
+        private Transformer(byte[] data) {
+            this.data = data;
         }
 
-        public ClassContext setAnnotationValue(String annDesc, String key, Object value) {
-            String desc = annDesc.startsWith("L") ? annDesc : "L" + annDesc.replace('.', '/') + ";";
-            if (node.visibleAnnotations == null) node.visibleAnnotations = new ArrayList<>();
-            updateAnnotationValue(node.visibleAnnotations, desc, key, value);
-            return this;
-        }
-
-
-        public ClassContext updateAnnotationValue(String annDesc, String key, Function<Object, Object> updater) {
-            String desc = annDesc.startsWith("L") ? annDesc : "L" + annDesc.replace('.', '/') + ";";
-            if (node.visibleAnnotations == null) return this;
-
-            for (AnnotationNode a : node.visibleAnnotations) {
-                if (a.desc.equals(desc)) {
-                    if (a.values == null) return this;
-                    for (int i = 0; i < a.values.size(); i += 2) {
-                        if (key.equals(a.values.get(i))) {
-                            Object oldValue = a.values.get(i + 1);
-                            Object newValue = updater.apply(oldValue);
-                            a.values.set(i + 1, newValue);
-                        }
-                    }
-                }
+        public Transformer apply(TransformerRule rule) {
+            try {
+                this.data = rule.accept(this.data);
+            } catch (Exception e) {
+                throw new RuntimeException("Error applying TransformerRule", e);
             }
             return this;
         }
 
+        public Transformer transformNode(java.util.function.Consumer<ClassNode> action) {
+            ClassReader reader = new ClassReader(data);
+            ClassNode node = new ClassNode(Opcodes.ASM9);
+            reader.accept(node, 0);
 
-        private void updateAnnotationValue(List<AnnotationNode> anns, String d, String k, Object v) {
-            for (AnnotationNode a : anns) {
-                if (a.desc.equals(d)) {
-                    if (a.values == null) a.values = new ArrayList<>();
-                    for (int i = 0; i < a.values.size(); i += 2) {
-                        if (k.equals(a.values.get(i))) {
-                            a.values.set(i + 1, v);
-                            return;
-                        }
-                    }
-                    a.values.add(k);
-                    a.values.add(v);
-                    return;
-                }
-            }
-        }
+            action.accept(node);
 
-        public ClassContext redirectMethod(String targetName, String newOwner, String newName, String newDesc) {
-            for (MethodNode m : node.methods) {
-                for (AbstractInsnNode i : m.instructions.toArray()) {
-                    if (i instanceof MethodInsnNode min && min.name.equals(targetName)) {
-                        min.setOpcode(Opcodes.INVOKESTATIC);
-                        min.owner = newOwner;
-                        min.name = newName;
-                        min.desc = newDesc;
-                    }
-                }
-            }
+            ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
+            node.accept(writer);
+            this.data = writer.toByteArray();
             return this;
         }
 
-        public ClassContext redirectFieldToMethod(String owner, String fieldName, String hOwner, String hName, String hDesc) {
-            for (MethodNode m : node.methods) {
-                for (AbstractInsnNode i : m.instructions.toArray()) {
-                    if (i instanceof FieldInsnNode fin && fin.owner.equals(owner) && fin.name.equals(fieldName)) {
-                        m.instructions.set(i, new MethodInsnNode(Opcodes.INVOKESTATIC, hOwner, hName, hDesc, false));
-                    }
-                }
-            }
+        public Transformer remap(String oldName, String newName) {
+            ClassReader reader = new ClassReader(data);
+            ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS);
+            ClassRemapper remapper = new ClassRemapper(writer, new PackageRemapper(oldName, newName));
+            reader.accept(remapper, 0);
+            this.data = writer.toByteArray();
             return this;
         }
 
-        public void addStaticMethod(String name, String desc, Consumer<MethodBodyBuilder> generator) {
-            MethodNode mn = node.methods.stream()
-                    .filter(m -> m.name.equals(name) && m.desc.equals(desc))
-                    .findFirst()
-                    .orElseGet(() -> {
-                        MethodNode newMn = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, name, desc, null, null);
-                        node.methods.add(newMn);
-                        return newMn;
-                    });
-            mn.instructions.clear();
-
-            mn.maxLocals = 8;
-            mn.maxStack = 8;
-
-            MethodBodyBuilder builder = createBuilder(mn);
-            mn.visitCode();
-            generator.accept(builder);
-
-            if (desc.endsWith("V") && (mn.instructions.getLast() == null || mn.instructions.getLast().getOpcode() != Opcodes.RETURN)) {
-                builder.returnValue();
-            }
-        }
-
-        private MethodBodyBuilder createBuilder(MethodNode mn) {
-            return new MethodBodyBuilder() {
-
+        public Transformer renameMethod(String oldName, String newName) {
+            ClassReader reader = new ClassReader(data);
+            ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS);
+            Remapper methodRemapper = new Remapper(Opcodes.ASM9) {
                 @Override
-                public MethodBodyBuilder dup() {
-                    mn.visitInsn(org.objectweb.asm.Opcodes.DUP);
-                    return this;
-                }
-
-                @Override
-                public MethodBodyBuilder loadArg(int i) {
-                    mn.visitVarInsn(Opcodes.ALOAD, i);
-                    return this;
-                }
-
-                @Override
-                public MethodBodyBuilder ldc(Object v) {
-                    mn.visitLdcInsn(v);
-                    return this;
-                }
-
-                @Override
-                public MethodBodyBuilder pop() {
-                    mn.visitInsn(Opcodes.POP);
-                    return this;
-                }
-
-                @Override
-                public MethodBodyBuilder swap() {
-                    mn.visitInsn(Opcodes.SWAP);
-                    return this;
-                }
-
-                @Override
-                public void returnValue() {
-                    mn.visitInsn(Opcodes.RETURN);
-                }
-
-                @Override
-                public void returnObject() {
-                    mn.visitInsn(Opcodes.ARETURN);
-                }
-
-                @Override
-                public MethodBodyBuilder getStaticField(String o, String n, String d) {
-                    mn.visitFieldInsn(Opcodes.GETSTATIC, o, n, d);
-                    return this;
-                }
-
-                @Override
-                public MethodBodyBuilder putStaticField(String o, String n, String d) {
-                    mn.visitFieldInsn(Opcodes.PUTSTATIC, o, n, d);
-                    return this;
-                }
-
-                @Override
-                public MethodBodyBuilder putField(String o, String n, String d) {
-                    mn.visitFieldInsn(Opcodes.PUTFIELD, o, n, d);
-                    return this;
-                }
-
-                @Override
-                public MethodBodyBuilder invokeVirtual(String o, String n, String d) {
-                    mn.visitMethodInsn(Opcodes.INVOKEVIRTUAL, o, n, d, false);
-                    return this;
-                }
-
-                @Override
-                public MethodBodyBuilder invokeInterface(String o, String n, String d) {
-                    mn.visitMethodInsn(Opcodes.INVOKEINTERFACE, o, n, d, true);
-                    return this;
-                }
-
-                @Override
-                public MethodBodyBuilder invokeStatic(String o, String n, String d) {
-                    mn.visitMethodInsn(Opcodes.INVOKESTATIC, o, n, d, false);
-                    return this;
-                }
-
-                @Override
-                public MethodBodyBuilder createNewObject(String t, String c, Consumer<MethodBodyBuilder> a) {
-                    mn.visitTypeInsn(Opcodes.NEW, t);
-                    mn.visitInsn(Opcodes.DUP);
-                    a.accept(this);
-                    mn.visitMethodInsn(Opcodes.INVOKESPECIAL, t, "<init>", c, false);
-                    return this;
-                }
-
-                @Override
-                public MethodBodyBuilder ifNull(Runnable b) {
-                    Label end = new Label();
-                    mn.visitJumpInsn(Opcodes.IFNONNULL, end);
-                    b.run();
-                    mn.visitLabel(end);
-                    return this;
+                public String mapMethodName(String owner, String name, String descriptor) {
+                    return name.equals(oldName) ? newName : name;
                 }
             };
+            reader.accept(new ClassRemapper(writer, methodRemapper), 0);
+            this.data = writer.toByteArray();
+            return this;
+        }
+
+        public Transformer redirectFieldToMethod(String targetOwner, String targetName, String newOwner, String newMethod, String newDesc) {
+            ClassReader reader = new ClassReader(data);
+            ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS);
+
+            reader.accept(new ClassVisitor(Opcodes.ASM9, writer) {
+                @Override
+                public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] ex) {
+                    return new MethodVisitor(Opcodes.ASM9, super.visitMethod(access, name, desc, sig, ex)) {
+                        @Override
+                        public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
+                            if (owner.equals(targetOwner) && name.equals(targetName)) {
+                                super.visitMethodInsn(Opcodes.INVOKESTATIC, newOwner, newMethod, newDesc, false);
+                            } else {
+                                super.visitFieldInsn(opcode, owner, name, descriptor);
+                            }
+                        }
+                    };
+                }
+            }, 0);
+
+            this.data = writer.toByteArray();
+            return this;
+        }
+
+        public Transformer modifyAnnotationValue(String targetDesc, String key, Function<Object, Object> mapper) {
+            ClassReader reader = new ClassReader(data);
+            ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS);
+
+            ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, writer) {
+                @Override
+                public AnnotationVisitor visitAnnotation(String desc, boolean visible) {
+                    return wrapAnnotationVisitor(super.visitAnnotation(desc, visible), desc, targetDesc, key, mapper);
+                }
+
+                @Override
+                public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
+                    return new FieldVisitor(Opcodes.ASM9, super.visitField(access, name, desc, signature, value)) {
+                        @Override
+                        public AnnotationVisitor visitAnnotation(String d, boolean v) {
+                            return wrapAnnotationVisitor(super.visitAnnotation(d, v), d, targetDesc, key, mapper);
+                        }
+                    };
+                }
+
+                @Override
+                public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] ex) {
+                    return new MethodVisitor(Opcodes.ASM9, super.visitMethod(access, name, desc, sig, ex)) {
+                        @Override
+                        public AnnotationVisitor visitAnnotation(String d, boolean v) {
+                            return wrapAnnotationVisitor(super.visitAnnotation(d, v), d, targetDesc, key, mapper);
+                        }
+
+                        @Override
+                        public AnnotationVisitor visitParameterAnnotation(int param, String d, boolean v) {
+                            return wrapAnnotationVisitor(super.visitParameterAnnotation(param, d, v), d, targetDesc, key, mapper);
+                        }
+                    };
+                }
+            };
+
+            reader.accept(cv, 0);
+            this.data = writer.toByteArray();
+            return this;
+        }
+
+        public byte[] build() {
+            return this.data;
+        }
+    }
+
+    private static class PackageRemapper extends Remapper {
+        private final String oldPackage;
+        private final String newPackage;
+
+        public PackageRemapper(String oldPackage, String newPackage) {
+            super(Opcodes.ASM9);
+            this.oldPackage = oldPackage;
+            this.newPackage = newPackage;
+        }
+
+        @Override
+        public String map(String internalName) {
+            if (internalName.startsWith(oldPackage)) {
+                return newPackage + internalName.substring(oldPackage.length());
+            }
+            return internalName;
+        }
+    }
+
+    private static class AnnotationValueModifier extends AnnotationVisitor {
+        private final String targetKey;
+        private final Function<Object, Object> mapper;
+
+        public AnnotationValueModifier(AnnotationVisitor av, String key, Function<Object, Object> mapper) {
+            super(Opcodes.ASM9, av);
+            this.targetKey = key;
+            this.mapper = mapper;
+        }
+
+        @Override
+        public void visit(String name, Object value) {
+            if (name != null && name.equals(targetKey)) {
+                Object newValue = mapper.apply(value);
+                super.visit(name, newValue);
+            } else {
+                super.visit(name, value);
+            }
         }
     }
 }

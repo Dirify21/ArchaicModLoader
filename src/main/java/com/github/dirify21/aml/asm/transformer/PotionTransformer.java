@@ -1,66 +1,48 @@
 package com.github.dirify21.aml.asm.transformer;
 
 import com.github.dirify21.aml.asm.util.ASMUtil;
+import com.github.dirify21.aml.helper.ASMHelper;
+import com.github.dirify21.aml.helper.PotionHelper;
+import net.minecraft.potion.Potion;
 import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.tree.*;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.FieldInsnNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.LdcInsnNode;
+import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.MethodNode;
+
+import static com.github.dirify21.aml.helper.ASMHelper.methodDesc;
 
 public class PotionTransformer implements ASMUtil.TransformerRule {
-    private static final String HELPER = "com/github/dirify21/aml/util/RedirectHelper";
+    private static final String HELPER = Type.getInternalName(PotionHelper.class);
+    private static final String POTION = Type.getInternalName(Potion.class);
 
     @Override
-    public void accept(ASMUtil.ClassContext ctx) {
-        for (MethodNode m : ctx.node().methods) {
-            for (AbstractInsnNode i : m.instructions.toArray()) {
-                if (i instanceof FieldInsnNode fin && fin.getOpcode() == Opcodes.GETSTATIC && fin.owner.equals("net/minecraft/potion/Potion")) {
-                    if (fin.name.startsWith("field_")) {
-                        InsnList list = new InsnList();
-                        list.add(new LdcInsnNode(fin.name));
-                        list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, "getPotionFieldRedirect", "(Ljava/lang/String;)Lnet/minecraft/potion/Potion;", false));
-                        m.instructions.insertBefore(i, list);
-                        m.instructions.remove(i);
+    public byte[] accept(byte[] input) {
+        return ASMUtil.builder(input)
+                .transformNode(node -> {
+                    for (MethodNode m : node.methods) {
+                        transformPotionFields(m);
                     }
-                }
-
-                if (i instanceof MethodInsnNode min) {
-                    if (min.getOpcode() == Opcodes.INVOKESPECIAL &&
-                            min.owner.equals("net/minecraft/potion/PotionEffect") &&
-                            min.desc.equals("(III)V")) {
-
-                        min.setOpcode(Opcodes.INVOKESTATIC);
-                        min.owner = HELPER;
-                        min.name = "createPotionEffect";
-                        min.desc = "(III)Lnet/minecraft/potion/PotionEffect;";
-
-                        cleanUpConstructor(m, min);
-                    }
-                    if ((min.name.equals("func_77844_a") || min.name.equals("setPotionEffect")) &&
-                            min.desc.equals("(IIIF)Lnet/minecraft/item/ItemFood;")) {
-
-                        min.setOpcode(Opcodes.INVOKESTATIC);
-                        min.owner = HELPER;
-                        min.name = "setPotionEffectRedirect";
-                        min.desc = "(Lnet/minecraft/item/ItemFood;IIIF)Lnet/minecraft/item/ItemFood;";
-                    }
-                }
-            }
-        }
+                })
+                .redirectFieldToMethod(POTION, "field_76415_H", POTION, "func_188409_a", methodDesc(int.class, Potion.class))
+                .build();
     }
 
-    private void cleanUpConstructor(MethodNode m, MethodInsnNode min) {
-        AbstractInsnNode prev = min.getPrevious();
-        int count = 0;
-        while (prev != null && count < 10) {
-            if (prev.getOpcode() == Opcodes.DUP) {
-                AbstractInsnNode target = prev;
-                prev = prev.getPrevious();
-                m.instructions.remove(target);
-            } else if (prev.getOpcode() == Opcodes.NEW) {
-                m.instructions.remove(prev);
-                break;
-            } else {
-                prev = prev.getPrevious();
+    private void transformPotionFields(MethodNode m) {
+        for (AbstractInsnNode i : m.instructions) {
+            if (ASMHelper.isFieldAccess(i, Opcodes.GETSTATIC, POTION, "field_")) {
+                FieldInsnNode fin = (FieldInsnNode) i;
+
+                InsnList list = new InsnList();
+                list.add(new LdcInsnNode(fin.name));
+                list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, "getPotionField", methodDesc(Potion.class, String.class), false));
+
+                m.instructions.insertBefore(i, list);
+                m.instructions.remove(i);
             }
-            count++;
         }
     }
 }

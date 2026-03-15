@@ -1,36 +1,59 @@
 package com.github.dirify21.aml.asm.transformer;
 
 import com.github.dirify21.aml.asm.util.ASMUtil;
+import net.minecraftforge.fml.common.event.FMLInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.tree.*;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.InsnNode;
+import org.objectweb.asm.tree.LabelNode;
+import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.TryCatchBlockNode;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.objectweb.asm.Type.getInternalName;
 
 public class LifecycleTransformer implements ASMUtil.TransformerRule {
 
     @Override
-    public void accept(ASMUtil.ClassContext ctx) {
-        MethodNode preInitMethod = null;
-        MethodNode initMethod = null;
+    public byte[] accept(byte[] input) {
+        String preInitType = getInternalName(FMLPreInitializationEvent.class);
+        String initType = getInternalName(FMLInitializationEvent.class);
 
-        for (MethodNode m : ctx.node().methods) {
-            if (m.desc.contains("FMLPreInitializationEvent")) {
-                preInitMethod = m;
-            } else if (m.desc.contains("FMLInitializationEvent")) {
-                initMethod = m;
-            }
-        }
+        return ASMUtil.builder(input)
+                .transformNode(node -> {
+                    MethodNode preInit = null;
+                    MethodNode init = null;
 
-        if (preInitMethod != null && initMethod != null) {
-            if (containsBlockRegistration(initMethod)) {
-                moveInstructions(initMethod, preInitMethod);
-            }
-        }
+                    for (MethodNode m : node.methods) {
+                        Type[] args = Type.getArgumentTypes(m.desc);
+                        for (Type arg : args) {
+                            if (arg.getInternalName().equals(preInitType)) {
+                                preInit = m;
+                            } else if (arg.getInternalName().equals(initType)) {
+                                init = m;
+                            }
+                        }
+                    }
+
+                    if (preInit != null && init != null) {
+                        if (containsBlockRegistration(init)) {
+                            moveInstructions(init, preInit);
+                        }
+                    }
+                })
+                .build();
     }
 
     private boolean containsBlockRegistration(MethodNode m) {
         for (AbstractInsnNode i : m.instructions.toArray()) {
             if (i instanceof MethodInsnNode min) {
-                if (min.name.equals("registerBlock") ||
-                        (min.owner.contains("RedirectHelper") && min.name.contains("registerBlock"))) {
+                if (min.name.equals("registerBlock")) {
                     return true;
                 }
             }
@@ -38,35 +61,39 @@ public class LifecycleTransformer implements ASMUtil.TransformerRule {
         return false;
     }
 
-    private void moveInstructions(MethodNode sourceInit, MethodNode targetPreInit) {
-        InsnList instructionsToMove = sourceInit.instructions;
+    private void moveInstructions(MethodNode source, MethodNode target) {
+        Map<LabelNode, LabelNode> labels = new HashMap<>();
 
-        AbstractInsnNode last = instructionsToMove.getLast();
-        while (last != null && last.getOpcode() == -1) {
-            last = last.getPrevious();
-        }
-        if (last != null && last.getOpcode() == Opcodes.RETURN) {
-            instructionsToMove.remove(last);
+        InsnList cloned = new InsnList();
+        for (AbstractInsnNode insn : source.instructions) {
+            if (insn instanceof LabelNode ln) {
+                labels.put(ln, new LabelNode());
+            }
         }
 
-        AbstractInsnNode targetReturn = targetPreInit.instructions.getLast();
-        while (targetReturn != null && targetReturn.getOpcode() != Opcodes.RETURN) {
-            targetReturn = targetReturn.getPrevious();
+        for (AbstractInsnNode insn : source.instructions) {
+            cloned.add(insn.clone(labels));
+        }
+
+        AbstractInsnNode targetReturn = null;
+        for (AbstractInsnNode i : target.instructions) {
+            if (i.getOpcode() == Opcodes.RETURN) targetReturn = i;
         }
 
         if (targetReturn != null) {
-            targetPreInit.instructions.insertBefore(targetReturn, instructionsToMove);
+            target.instructions.insertBefore(targetReturn, cloned);
 
-            if (sourceInit.tryCatchBlocks != null) {
-                targetPreInit.tryCatchBlocks.addAll(sourceInit.tryCatchBlocks);
+            for (TryCatchBlockNode tcb : source.tryCatchBlocks) {
+                target.tryCatchBlocks.add(new TryCatchBlockNode(
+                        labels.get(tcb.start),
+                        labels.get(tcb.end),
+                        labels.get(tcb.handler),
+                        tcb.type
+                ));
             }
-
-            sourceInit.instructions.clear();
-            sourceInit.instructions.add(new InsnNode(Opcodes.RETURN));
-
-            if (sourceInit.localVariables != null) sourceInit.localVariables.clear();
-            if (sourceInit.tryCatchBlocks != null) sourceInit.tryCatchBlocks.clear();
-            if (sourceInit.attrs != null) sourceInit.attrs.clear();
         }
+
+        source.instructions.clear();
+        source.instructions.add(new InsnNode(Opcodes.RETURN));
     }
 }

@@ -21,11 +21,11 @@ public class ArchaicModelLoader implements ICustomModelLoader {
 
     @Override
     public IModel loadModel(ResourceLocation modelLocation) {
-        String fullPath = modelLocation.getPath();
-        ResourceLocation textureRes = new ResourceLocation(fullPath);
-        if (fullPath.contains("blocks/")) {
-            return new ArchaicBlockModel(textureRes);
-        }
-        return new ArchaicItemModel(textureRes);
+        var path = modelLocation.getPath();
+        var textureRes = new ResourceLocation(path);
+
+        return path.contains("blocks/")
+                ? new ArchaicBlockModel(textureRes)
+                : new ArchaicItemModel(textureRes);
     }
 }

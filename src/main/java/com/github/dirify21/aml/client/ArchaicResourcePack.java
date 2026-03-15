@@ -1,22 +1,23 @@
 package com.github.dirify21.aml.client;
 
-import com.github.dirify21.aml.classloader.AMLClassLoader;
+import com.github.dirify21.aml.core.AMLLoadingPlugin;
 import net.minecraft.client.resources.IResourcePack;
 import net.minecraft.client.resources.data.IMetadataSection;
 import net.minecraft.client.resources.data.MetadataSerializer;
 import net.minecraft.util.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
-import javax.annotation.Nullable;
 import java.awt.image.BufferedImage;
-import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 public class ArchaicResourcePack implements IResourcePack {
-
     private final Map<String, ZipEntrySource> resourceCache = new HashMap<>();
     private final Set<String> domains = new HashSet<>();
 
@@ -28,55 +29,62 @@ public class ArchaicResourcePack implements IResourcePack {
         resourceCache.clear();
         domains.clear();
 
-        for (File file : AMLClassLoader.ARCHAIC_FILES) {
-            try (ZipFile zipFile = new ZipFile(file)) {
-                Enumeration<? extends ZipEntry> entries = zipFile.entries();
+        for (Path modPath : AMLLoadingPlugin.ARCHAIC_FILES) {
+            try (ZipFile zip = new ZipFile(modPath.toFile())) {
+                var entries = zip.entries();
                 while (entries.hasMoreElements()) {
-                    ZipEntry entry = entries.nextElement();
-                    if (entry.isDirectory()) continue;
-
-                    String name = entry.getName();
-                    if (name.startsWith("assets/")) {
-                        String[] parts = name.split("/", 3);
+                    String name = entries.nextElement().getName();
+                    if (name.startsWith("assets/") && !name.endsWith("/")) {
+                        String[] parts = name.split("/");
                         if (parts.length >= 3) {
                             domains.add(parts[1]);
-                            resourceCache.put(name.toLowerCase(), new ZipEntrySource(file, name));
+                            resourceCache.put(name.toLowerCase(Locale.ROOT), new ZipEntrySource(modPath, name));
                         }
                     }
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                AMLLoadingPlugin.LOGGER.error("Failed to read {}: {}", modPath, e.getMessage());
             }
         }
     }
 
     @Override
     public InputStream getInputStream(ResourceLocation location) throws IOException {
-        String path = String.format("assets/%s/%s", location.getNamespace(), location.getPath()).toLowerCase();
+        String path = "assets/%s/%s".formatted(location.getNamespace(), location.getPath()).toLowerCase(Locale.ROOT);
         ZipEntrySource source = resourceCache.get(path);
 
-        if (source == null) {
-            throw new java.io.FileNotFoundException(location.toString());
+        if (source == null) throw new FileNotFoundException(location.toString());
+
+        ZipFile zip = new ZipFile(source.path().toFile());
+        ZipEntry entry = zip.getEntry(source.originalName());
+
+        if (entry == null) {
+            zip.close();
+            throw new FileNotFoundException(source.originalName());
         }
 
-        ZipFile zipFile = new ZipFile(source.file);
-        return zipFile.getInputStream(zipFile.getEntry(source.originalName));
+        return new FilterInputStream(zip.getInputStream(entry)) {
+            @Override
+            public void close() throws IOException {
+                super.close();
+                zip.close();
+            }
+        };
     }
 
     @Override
     public boolean resourceExists(ResourceLocation location) {
-        String path = String.format("assets/%s/%s", location.getNamespace(), location.getPath()).toLowerCase();
-        return resourceCache.containsKey(path);
+        String path = "assets/" + location.getNamespace() + "/" + location.getPath();
+        return resourceCache.containsKey(path.toLowerCase(Locale.ROOT));
     }
 
     @Override
     public Set<String> getResourceDomains() {
-        return domains;
+        return Collections.unmodifiableSet(domains);
     }
 
-    @Nullable
     @Override
-    public <T extends IMetadataSection> T getPackMetadata(MetadataSerializer metadataSerializer, String metadataSectionName) {
+    public @Nullable <T extends IMetadataSection> T getPackMetadata(MetadataSerializer ms, String s) {
         return null;
     }
 
@@ -90,6 +98,6 @@ public class ArchaicResourcePack implements IResourcePack {
         return "Archaic Resources";
     }
 
-    private record ZipEntrySource(File file, String originalName) {
+    private record ZipEntrySource(Path path, String originalName) {
     }
 }

@@ -1,76 +1,97 @@
 package com.github.dirify21.aml.asm.transformer;
 
 import com.github.dirify21.aml.asm.util.ASMUtil;
+import com.github.dirify21.aml.helper.ASMHelper;
+import com.github.dirify21.aml.helper.TileEntityHelper;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.ITickable;
 import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.tree.*;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.InsnNode;
+import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.VarInsnNode;
+
+import java.util.ArrayList;
+
+import static com.github.dirify21.aml.asm.util.ASMUtil.builder;
+import static com.github.dirify21.aml.helper.ASMHelper.methodDesc;
+import static org.objectweb.asm.Type.getInternalName;
 
 public class TileEntityTransformer implements ASMUtil.TransformerRule {
-    private static final String HELPER = "com/github/dirify21/aml/util/RedirectHelper";
+    private static final String HELPER = getInternalName(TileEntityHelper.class);
+    private static final String TILE_ENTITY = getInternalName(TileEntity.class);
+    private static final String ITICKABLE = getInternalName(ITickable.class);
 
     @Override
-    public void accept(ASMUtil.ClassContext ctx) {
-        if (ctx.node().superName == null || !ctx.node().superName.equals("net/minecraft/tileentity/TileEntity")) return;
+    public byte[] accept(byte[] input) {
+        return builder(input)
+                .transformNode(node -> {
+                    if (!TILE_ENTITY.equals(node.superName)) return;
 
-        if (!ctx.node().interfaces.contains("net/minecraft/util/ITickable")) {
-            ctx.node().interfaces.add("net/minecraft/util/ITickable");
-        }
+                    boolean hasOnLoad = false;
 
-        boolean hasOnLoad = false;
+                    for (MethodNode method : node.methods) {
+                        if (ASMHelper.isMethod(method, "func_145845_h", methodDesc(void.class))) {
+                            if (!node.interfaces.contains(ITICKABLE)) node.interfaces.add(ITICKABLE);
+                            method.name = "func_73660_a";
+                        }
 
-        for (MethodNode m : ctx.node().methods) {
-            if ((m.name.equals("updateEntity") || m.name.equals("func_145845_h")) && m.desc.equals("()V")) {
-                m.name = "func_73660_a";
-            }
+                        if (ASMHelper.isMethod(method, "onLoad", methodDesc(void.class))) {
+                            hasOnLoad = true;
+                            injectTransparentLogic(method);
+                        }
 
-            if (m.name.equals("onLoad") && m.desc.equals("()V")) {
-                hasOnLoad = true;
-                for (AbstractInsnNode i : m.instructions.toArray()) {
-                    if (i.getOpcode() == Opcodes.RETURN) {
-                        InsnList list = new InsnList();
-                        list.add(new VarInsnNode(Opcodes.ALOAD, 0));
-                        list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, "makeTransparent", "(Ljava/lang/Object;)V", false));
-                        m.instructions.insertBefore(i, list);
+                        removeSuperUpdateCalls(method);
                     }
-                }
-            }
 
-            for (AbstractInsnNode i : m.instructions.toArray()) {
-                if (i instanceof FieldInsnNode fin) {
-                    switch (fin.name) {
-                        case "xCoord", "field_145851_c" -> replaceWithStatic(m, i, "getX");
-                        case "yCoord", "field_145848_d" -> replaceWithStatic(m, i, "getY");
-                        case "zCoord", "field_145849_e" -> replaceWithStatic(m, i, "getZ");
+                    if (!hasOnLoad) {
+                        node.methods.add(createOnLoadMethod());
                     }
-                }
+                })
+                .build();
+    }
 
-                if (i instanceof MethodInsnNode min) {
-                    if ((min.name.equals("updateEntity") || min.name.equals("func_145845_h")) &&
-                            min.getOpcode() == Opcodes.INVOKESPECIAL &&
-                            min.owner.equals("net/minecraft/tileentity/TileEntity")) {
-                        AbstractInsnNode prev = min.getPrevious();
-                        if (prev != null && prev.getOpcode() == Opcodes.ALOAD) m.instructions.remove(prev);
-                        m.instructions.remove(min);
-                    }
-                }
+    private void injectTransparentLogic(MethodNode method) {
+        for (var insn : method.instructions) {
+            if (insn.getOpcode() == Opcodes.RETURN) {
+                var list = new InsnList();
+                list.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, "makeTransparent", methodDesc(void.class, Object.class), false));
+                method.instructions.insertBefore(insn, list);
             }
-        }
-
-        if (!hasOnLoad) {
-            MethodNode m = new MethodNode(Opcodes.ACC_PUBLIC, "onLoad", "()V", null, null);
-            InsnList list = m.instructions;
-
-            list.add(new VarInsnNode(Opcodes.ALOAD, 0));
-            list.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, ctx.node().superName, "onLoad", "()V", false));
-
-            list.add(new VarInsnNode(Opcodes.ALOAD, 0));
-            list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, "makeTransparent", "(Ljava/lang/Object;)V", false));
-
-            list.add(new InsnNode(Opcodes.RETURN));
-            ctx.node().methods.add(m);
         }
     }
 
-    private void replaceWithStatic(MethodNode m, AbstractInsnNode i, String methodName) {
-        m.instructions.set(i, new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, methodName, "(Lnet/minecraft/tileentity/TileEntity;)I", false));
+    private void removeSuperUpdateCalls(MethodNode method) {
+        var toRemove = new ArrayList<AbstractInsnNode>();
+
+        for (var insn : method.instructions) {
+            if (ASMHelper.isMethodCall(insn, Opcodes.INVOKESPECIAL, TILE_ENTITY, "func_145845_h", null)) {
+                toRemove.add(insn);
+            }
+        }
+
+        for (var insn : toRemove) {
+            var prev = insn.getPrevious();
+            if (prev instanceof VarInsnNode vin && vin.getOpcode() == Opcodes.ALOAD && vin.var == 0) {
+                method.instructions.remove(prev);
+            }
+            method.instructions.remove(insn);
+        }
+    }
+
+    private MethodNode createOnLoadMethod() {
+        var mn = new MethodNode(Opcodes.ACC_PUBLIC, "onLoad", methodDesc(void.class), null, null);
+        var insn = mn.instructions;
+
+        insn.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        insn.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, TILE_ENTITY, "onLoad", methodDesc(void.class), false));
+        insn.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        insn.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, "makeTransparent", methodDesc(void.class, Object.class), false));
+        insn.add(new InsnNode(Opcodes.RETURN));
+
+        return mn;
     }
 }

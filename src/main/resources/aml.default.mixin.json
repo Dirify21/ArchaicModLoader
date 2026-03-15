@@ -1,16 +1,27 @@
 {
   "required": true,
-  "package": "com.github.dirify21.aml.mixin.mixins.minecraft",
+  "package": "com.github.dirify21.aml.mixin",
+  "plugin": "com.github.dirify21.aml.core.AMLMixinConfigPlugin",
   "compatibilityLevel": "JAVA_8",
   "target": "@env(DEFAULT)",
   "client": [
-    "MinecraftMixin"
+    "MinecraftMixin",
+    "RenderManagerMixin",
+    "TextureAtlasSpriteMixin",
+    "TileEntitySpecialRendererMixin"
   ],
   "mixins": [
-    "BlockContainerMixin",
-    "BlockMixin",
-    "ItemMixin",
-    "JarDiscovererMixin"
+    "AxisAlignedBBMixin",
+    "forge.GameRegistryMixin",
+    "PotionEffectMixin",
+    "TileEntityMixin",
+    "WorldMixin",
+    "block.BlockContainerMixin",
+    "block.BlockMixin",
+    "forge.IForgeRegistryAccessor",
+    "forge.JarDiscovererMixin",
+    "item.ItemFoodMixin",
+    "item.ItemMixin"
   ],
   "server": [],
   "setSourceFile": true,
